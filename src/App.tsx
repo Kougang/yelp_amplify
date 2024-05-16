@@ -9,6 +9,8 @@ import { createRestaurant } from "./graphql/mutations";
 import { listRestaurants } from "./graphql/queries";
 import { onCreateRestaurant } from "./graphql/subscriptions";
 
+import { Observable } from "zen-observable-ts";
+
 Amplify.configure(awsConfig);
 
 type Restaurant = {
@@ -81,9 +83,11 @@ const App: React.FC = () => {
   useEffect(() => {
     getRestaurantList();
 
-    const subscription = API.graphql(
+    const observable = API.graphql(
       graphqlOperation(onCreateRestaurant)
-    ).subscribe({
+    ) as Observable<any>;
+
+    const subscription = observable.subscribe({
       next: (
         eventData: SubscriptionEvent<{ onCreateRestaurant: Restaurant }>
       ) => {
@@ -95,11 +99,28 @@ const App: React.FC = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const getRestaurantList = async () => {
-    const restaurants = await API.graphql(graphqlOperation(listRestaurants));
-    dispatch({
-      type: "QUERY",
-      payload: restaurants.data.listRestaurants.items,
+  // const getRestaurantList = async () => {
+  //   const restaurants = await API.graphql(graphqlOperation(listRestaurants));
+  //   dispatch({
+  //     type: "QUERY",
+  //     payload: restaurants.data.listRestaurants.items,
+  //   });
+  // };
+
+  const getRestaurantList = () => {
+    const observable = API.graphql(
+      graphqlOperation(listRestaurants)
+    ) as Observable<any>;
+
+    return new Promise((resolve, reject) => {
+      observable.subscribe(
+        (result) => {
+          resolve(result.data.listRestaurants.items);
+        },
+        (error) => {
+          reject(error);
+        }
+      );
     });
   };
 
