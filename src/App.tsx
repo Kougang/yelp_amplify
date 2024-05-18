@@ -4,12 +4,13 @@ import { Button, Col, Container, Form, Row, Table } from "react-bootstrap";
 import { withAuthenticator } from "@aws-amplify/ui-react";
 import "@aws-amplify/ui-react/styles.css";
 import { Amplify, API, graphqlOperation } from "aws-amplify";
+
 import awsConfig from "./aws-exports";
 import { createRestaurant } from "./graphql/mutations";
 import { listRestaurants } from "./graphql/queries";
 import { onCreateRestaurant } from "./graphql/subscriptions";
 
-import { Observable } from "zen-observable-ts";
+import { Observable } from "zen-observable-ts"; // Utilisez zen-observable-ts
 
 Amplify.configure(awsConfig);
 
@@ -65,63 +66,51 @@ const reducer = (state: AppState, action: Action) => {
 };
 
 const App: React.FC = () => {
-  const createNewRestaurant = async (e: React.SyntheticEvent) => {
-    e.stopPropagation();
-    const { name, description, city } = state.formData;
-    const restaurant = {
-      name,
-      description,
-      city,
-    };
-    await API.graphql(
-      graphqlOperation(createRestaurant, { input: restaurant })
-    );
-  };
-
   const [state, dispatch] = useReducer(reducer, initialState);
 
   useEffect(() => {
     getRestaurantList();
 
-    const observable = API.graphql(
+    const subscription = API.graphql(
       graphqlOperation(onCreateRestaurant)
-    ) as Observable<any>;
+    ) as Observable<SubscriptionEvent<{ onCreateRestaurant: Restaurant }>>;
 
-    const subscription = observable.subscribe({
-      next: (
-        eventData: SubscriptionEvent<{ onCreateRestaurant: Restaurant }>
-      ) => {
+    const subscriptionObservable = subscription.subscribe({
+      next: (eventData) => {
         const payload = eventData.value.data.onCreateRestaurant;
         dispatch({ type: "SUBSCRIPTION", payload });
       },
     });
 
-    return () => subscription.unsubscribe();
+    return () => subscriptionObservable.unsubscribe();
   }, []);
 
-  // const getRestaurantList = async () => {
-  //   const restaurants = await API.graphql(graphqlOperation(listRestaurants));
-  //   dispatch({
-  //     type: "QUERY",
-  //     payload: restaurants.data.listRestaurants.items,
-  //   });
-  // };
+  const getRestaurantList = async () => {
+    try {
+      const result = (await API.graphql(graphqlOperation(listRestaurants))) as {
+        data: { listRestaurants: { items: Restaurant[] } };
+      };
+      dispatch({
+        type: "QUERY",
+        payload: result.data.listRestaurants.items,
+      });
+    } catch (error) {
+      console.error("Error fetching restaurants:", error);
+    }
+  };
 
-  const getRestaurantList = () => {
-    const observable = API.graphql(
-      graphqlOperation(listRestaurants)
-    ) as Observable<any>;
-
-    return new Promise((resolve, reject) => {
-      observable.subscribe(
-        (result) => {
-          resolve(result.data.listRestaurants.items);
-        },
-        (error) => {
-          reject(error);
-        }
+  const createNewRestaurant = async (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    const { name, description, city } = state.formData;
+    const restaurant = { name, description, city };
+    try {
+      await API.graphql(
+        graphqlOperation(createRestaurant, { input: restaurant })
       );
-    });
+      // Optionally clear the form or provide feedback to the user here
+    } catch (error) {
+      console.error("Error creating restaurant:", error);
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) =>
